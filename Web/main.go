@@ -5,34 +5,17 @@ import (
 	"html/template"
 	"io/ioutil"
 	"net/http"
-	"os"
-	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/russross/blackfriday/v2"
 )
 
-// Obsidian markdown directory
-const obsidianDir = "./notes"
+var file_path = "C:\\Users\\45685\\桌面\\Desktop\\Obsidian\\todo.md"
 
 func renderMarkdownToHTML(mdContent []byte) template.HTML {
 	// Convert markdown to HTML using blackfriday
 	output := blackfriday.Run(mdContent)
 	return template.HTML(output)
-}
-
-func listMarkdownFiles() ([]string, error) {
-	var files []string
-	err := filepath.Walk(obsidianDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() && filepath.Ext(path) == ".md" {
-			files = append(files, path)
-		}
-		return nil
-	})
-	return files, err
 }
 
 func main() {
@@ -43,25 +26,12 @@ func main() {
 
 	// Route for displaying markdown as HTML
 	r.GET("/", func(c *gin.Context) {
-		files, err := listMarkdownFiles()
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Error listing files: %v", err)
-			return
-		}
-
-		// Display first markdown file as an example
-		if len(files) == 0 {
-			c.String(http.StatusNotFound, "No markdown files found.")
-			return
-		}
-
-		mdFile := files[0]
+		mdFile := file_path
 		mdContent, err := ioutil.ReadFile(mdFile)
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Error reading file: %v", err)
 			return
 		}
-
 		htmlContent := renderMarkdownToHTML(mdContent)
 		c.HTML(http.StatusOK, "index.html", gin.H{
 			"content": htmlContent,
