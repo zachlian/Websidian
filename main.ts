@@ -1,14 +1,27 @@
 // main.ts
-import { App, Plugin, Notice, TFile, Modal } from 'obsidian';
+import { App, Plugin, Notice, TFile, Modal, Setting, PluginSettingTab } from 'obsidian';
 import { exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as net from 'net';
+
+// interface for settings
+interface WebsidianSettings {
+    ports: number[];
+}
+// setting tab
+const DEFAULT_SETTINGS: WebsidianSettings = {
+    ports: []
+};
 
 export default class WebsidianPlugin extends Plugin {
-    async onload() {
+    settings: WebsidianSettings;
+    private serverProcess: any = null;
+
+    async onload() { // triggered when the plugin is loaded
         console.log('Loading Websidian plugin');
         
-        // 添加命令
+        // select & run command
         this.addCommand({
             id: 'select-file-and-execute',
             name: 'Select file and run server',
@@ -17,6 +30,18 @@ export default class WebsidianPlugin extends Plugin {
                 this.openFilePickerAndExecute();
             }
         });
+        // view ports in settings
+        await this.loadSettings();
+        
+        this.addSettingTab(new WebsidianSettingTab(this.app, this));
+    }
+
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
+
+    async saveSettings() {
+        await this.saveData(this.settings);
     }
 
     getPluginPath(): string {
@@ -55,13 +80,6 @@ export default class WebsidianPlugin extends Plugin {
             const vaultPath = (this.app.vault.adapter as any).getBasePath();
             const absoluteFilePath = path.join(vaultPath, filePath);
             console.log('Absolute file path:', absoluteFilePath);
-            
-            // 检查 Web/main.go 是否存在
-            if (!fs.existsSync(mainGoPath)) {
-                new Notice('Error: Web/main.go not found!');
-                console.error('main.go not found at:', mainGoPath);
-                return;
-            }
 
             // 读取 main.go 文件内容
             let content = fs.readFileSync(mainGoPath, 'utf8');
@@ -79,7 +97,7 @@ export default class WebsidianPlugin extends Plugin {
             const webDir = path.join(pluginPath, 'Web');
             console.log('Executing go run in:', webDir);
             
-            exec('go run main.go', { cwd: webDir }, (error, stdout, stderr) => {
+            this.serverProcess = exec('go run main.go', { cwd: webDir }, (error, stdout, stderr) => {
                 if (error) {
                     new Notice(`Error executing main.go: ${error.message}`);
                     console.error(`Error: ${error}`);
@@ -97,6 +115,76 @@ export default class WebsidianPlugin extends Plugin {
         } catch (error) {
             new Notice(`Error: ${error.message}`);
             console.error('Error:', error);
+        }
+    }
+
+    // 掃描開啟的端口並保存到設定
+    async scanOpenPorts() {
+        const openPorts: number[] = [];
+
+        for (let port = 8000; port <= 9000; port++) {
+            const server = net.createServer();
+            server.listen(port);
+            server.once('error', () => {
+                openPorts.push(port);
+            });
+            server.close();
+        }
+
+        this.settings.ports = openPorts;
+        await this.saveSettings();
+    }
+    // 關閉特定端口
+    async closePort(port: number) {
+        try {
+            await fetch(`http://localhost:${port}/shutdown`);
+            new Notice('Server shutting down...');
+        } catch (error) {
+            new Notice(`Error: ${error.message}`);
+        }
+    }
+}
+
+class WebsidianSettingTab extends PluginSettingTab {
+    plugin: WebsidianPlugin;
+
+    constructor(app: App, plugin: WebsidianPlugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+
+    display(): void {
+        const { containerEl } = this;
+
+        containerEl.empty();
+        containerEl.createEl('h2', { text: 'Websidian Plugin Settings' });
+
+        // 檢視開啟的端口
+        new Setting(containerEl)
+            .setName('View Open Ports')
+            .setDesc('Shows all currently open ports within range 8000-9000.')
+            .addButton(button => {
+                button.setButtonText('Scan Ports')
+                    .setCta()
+                    .onClick(async () => {
+                        await this.plugin.scanOpenPorts();
+                        this.display();  // 更新顯示
+                    });
+            });
+
+        // 顯示已掃描的端口
+        if (this.plugin.settings.ports.length > 0) {
+            containerEl.createEl('h3', { text: 'Open Ports:' });
+            this.plugin.settings.ports.forEach(port => {
+                const portSetting = new Setting(containerEl)
+                    .setName(`Port: ${port}`)
+                    .addButton(button => {
+                        button.setButtonText('Close')
+                            .onClick(() => this.plugin.closePort(port));
+                    });
+            });
+        } else {
+            containerEl.createEl('p', { text: 'No open ports found.' });
         }
     }
 }
