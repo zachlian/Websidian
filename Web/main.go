@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -15,7 +16,7 @@ import (
 	"github.com/russross/blackfriday/v2"
 )
 
-var file_path = "C:\\Users\\45685\\桌面\\Desktop\\Obsidian\\todo.md"
+var file_path = "C:\\Users\\45685\\桌面\\Desktop\\Obsidian\\Project\\Websidian\\SPEC.md"
 
 func renderMarkdownToHTML(mdContent []byte) template.HTML {
 	// Convert markdown to HTML using blackfriday
@@ -69,7 +70,7 @@ func main() {
 
 	// 設置關閉控制，等待中斷信號來優雅地關閉伺服器
 	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, os.Interrupt)
+	signal.Notify(quit, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	fmt.Println("Shutting down server...")
 
@@ -81,4 +82,5 @@ func main() {
 	}
 
 	fmt.Println("Server exiting")
+	os.Exit(0)
 }

@@ -3,148 +3,131 @@ import { App, Plugin, Notice, TFile, Modal, Setting, PluginSettingTab } from 'ob
 import { exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as net from 'net';
+import * as ngrok from 'ngrok';
 
-// interface for settings
 interface WebsidianSettings {
-    ports: number[];
+    ngrokUrl: string;
 }
-// setting tab
+
 const DEFAULT_SETTINGS: WebsidianSettings = {
-    ports: []
+    ngrokUrl: ''
 };
 
 export default class WebsidianPlugin extends Plugin {
     settings: WebsidianSettings;
-    private serverProcess: any = null;
-
-    async onload() { // triggered when the plugin is loaded
-        console.log('Loading Websidian plugin');
-        
-        // select & run command
-        this.addCommand({
-            id: 'select-file-and-execute',
-            name: 'Select file and run server',
-            callback: () => {
-                console.log('Command triggered');
-                this.openFilePickerAndExecute();
-            }
-        });
-        // view ports in settings
+    serverProcess: any = null;
+    ngrokProcess: any = null;
+    // triggered when the plugin is loaded
+    async onload() { 
+        //this.settings.ngrokUrl = '';
         await this.loadSettings();
-        
         this.addSettingTab(new WebsidianSettingTab(this.app, this));
     }
-
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     }
-
     async saveSettings() {
         await this.saveData(this.settings);
     }
+    // start server
+    async startServer() {
+        if (this.serverProcess) {
+            new Notice('Server is already running.');
+            return;
+        }
 
-    getPluginPath(): string {
-        // 获取插件目录路径
-        // @ts-ignore - 使用私有 API
-        const pluginPath = (this.app.vault.adapter as any).getFullPath(
-            '.obsidian/plugins/websidian'
-        );
-        console.log('Plugin path:', pluginPath);
-        return pluginPath;
-    }
-
-    async openFilePickerAndExecute() {
-        console.log('Opening file picker');
         const files = this.app.vault.getFiles();
         const modal = new FileSelectionModal(this.app, files, async (file: TFile) => {
             if (file) {
-                await this.executeWithPath(file.path);
+                await this.runGoServer(file.path);
             }
         });
         modal.open();
     }
+    // run go server
+    async runGoServer(filePath: string) {
+        const pluginPath = (this.app.vault.adapter as any).getFullPath(
+            '.obsidian/plugins/websidian'
+        );
+        const mainGoPath = path.join(pluginPath, 'Web', 'main.go');
+        const vaultPath = (this.app.vault.adapter as any).getBasePath();
+        const absoluteFilePath = path.join(vaultPath, filePath);
 
-    async executeWithPath(filePath: string) {
+        let content = fs.readFileSync(mainGoPath, 'utf8');
+        content = content.replace(
+            /var\s+file_path\s*=\s*"[^"]*"/,
+            `var file_path = "${absoluteFilePath.replace(/\\/g, '\\\\')}"`
+        );
+        
+        fs.writeFileSync(mainGoPath, content);
+
+        const webDir = path.join(pluginPath, 'Web');
+        
+        this.serverProcess = exec('go run main.go', { cwd: webDir }, (error) => {
+            if (error) {
+                new Notice(`Error executing main.go: ${error.message}`);
+                return;
+            }
+        });
+        new Notice('Server started on port 8080');
+    }
+    // close port
+    async stopServer() {
+        await fetch(`http://localhost:8080/shutdown`);
+
+        if (this.serverProcess) {
+            this.serverProcess.kill('SIGINT');
+            this.serverProcess = null;
+        }
+
+        new Notice('Server shutting down');
+    }
+    // start ngrok
+    async startNgrok() {
         try {
-            console.log('Executing with path:', filePath);
-            
-            // 获取插件目录的完整路径
-            const pluginPath = this.getPluginPath();
-            
-            // 构建 Web/main.go 的完整路径
-            const mainGoPath = path.join(pluginPath, 'Web', 'main.go');
-            console.log('Main.go path:', mainGoPath);
-            
-            // 获取 vault 的根路径（用于构建文件的完整路径）
-            const vaultPath = (this.app.vault.adapter as any).getBasePath();
-            const absoluteFilePath = path.join(vaultPath, filePath);
-            console.log('Absolute file path:', absoluteFilePath);
-
-            // 读取 main.go 文件内容
-            let content = fs.readFileSync(mainGoPath, 'utf8');
-            
-            // 替换 file_path 变量，使用绝对路径
-            content = content.replace(
-                /var\s+file_path\s*=\s*"[^"]*"/,
-                `var file_path = "${absoluteFilePath.replace(/\\/g, '\\\\')}"`
-            );
-            
-            // 写回文件
-            fs.writeFileSync(mainGoPath, content);
-
-            // 切换到 Web 目录并执行 go run main.go
-            const webDir = path.join(pluginPath, 'Web');
-            console.log('Executing go run in:', webDir);
-            
-            this.serverProcess = exec('go run main.go', { cwd: webDir }, (error, stdout, stderr) => {
-                if (error) {
-                    new Notice(`Error executing main.go: ${error.message}`);
-                    console.error(`Error: ${error}`);
-                    return;
-                }
-                
-                if (stderr) {
-                    console.error(`stderr: ${stderr}`);
-                }
-                
-                new Notice('Server started successfully!');
-                console.log(`stdout: ${stdout}`);
+            // 啟動 ngrok 隧道，指定本地端口
+            const url = await ngrok.connect({
+                addr: 8080,
+                binPath: (defaultPath) => {
+                    return 'C:\\Program Files\\ngrok'
+                },
+                authtoken: '2nszHpjRqbqZdUKp8Hwpf0G6RaZ_25Jibwnp3gaRdMrHQGB3H'
             });
-
+        
+            this.settings.ngrokUrl = url;
+            await this.saveSettings();
         } catch (error) {
-            new Notice(`Error: ${error.message}`);
             console.error('Error:', error);
+            throw error;
         }
+        new Notice('Ngrok tunnel started');
     }
+    // stop ngrok
+    async stopNgrok() {
+        await ngrok.disconnect();
+        await ngrok.kill();
 
-    // 掃描開啟的端口並保存到設定
-    async scanOpenPorts() {
-        const openPorts: number[] = [];
-
-        for (let port = 8000; port <= 9000; port++) {
-            const server = net.createServer();
-            server.listen(port);
-            server.once('error', () => {
-                openPorts.push(port);
-            });
-            server.close();
+        if (this.ngrokProcess) {
+            this.ngrokProcess.kill();
+            this.ngrokProcess = null;
+            this.settings.ngrokUrl = '';
+            await this.saveSettings();
         }
-
-        this.settings.ports = openPorts;
-        await this.saveSettings();
+        new Notice('Ngrok tunnel stopped');
     }
-    // 關閉特定端口
-    async closePort(port: number) {
-        try {
-            await fetch(`http://localhost:${port}/shutdown`);
-            new Notice('Server shutting down...');
-        } catch (error) {
-            new Notice(`Error: ${error.message}`);
+    // on unload
+    async onunload() {
+        await this.stopServer();
+        await this.stopNgrok();
+        if (this.ngrokProcess) {
+            this.ngrokProcess.kill();
+        }
+        if (this.serverProcess) {
+            this.serverProcess.kill();
         }
     }
 }
-
+// Setting tab
 class WebsidianSettingTab extends PluginSettingTab {
     plugin: WebsidianPlugin;
 
@@ -155,40 +138,77 @@ class WebsidianSettingTab extends PluginSettingTab {
 
     display(): void {
         const { containerEl } = this;
-
         containerEl.empty();
-        containerEl.createEl('h2', { text: 'Websidian Plugin Settings' });
 
-        // 檢視開啟的端口
-        new Setting(containerEl)
-            .setName('View Open Ports')
-            .setDesc('Shows all currently open ports within range 8000-9000.')
-            .addButton(button => {
-                button.setButtonText('Scan Ports')
-                    .setCta()
-                    .onClick(async () => {
-                        await this.plugin.scanOpenPorts();
-                        this.display();  // 更新顯示
-                    });
-            });
+        containerEl.createEl('h2', { text: 'Websidian Settings' });
 
-        // 顯示已掃描的端口
-        if (this.plugin.settings.ports.length > 0) {
-            containerEl.createEl('h3', { text: 'Open Ports:' });
-            this.plugin.settings.ports.forEach(port => {
-                const portSetting = new Setting(containerEl)
-                    .setName(`Port: ${port}`)
-                    .addButton(button => {
-                        button.setButtonText('Close')
-                            .onClick(() => this.plugin.closePort(port));
-                    });
-            });
-        } else {
-            containerEl.createEl('p', { text: 'No open ports found.' });
+        const portInfo = new Setting(containerEl)
+            .setName('Server Port')
+            .setDesc('8080');
+
+        if (this.plugin.settings.ngrokUrl) {
+            const urlContainer = containerEl.createEl('div', { cls: 'url-container' });
+            
+            new Setting(urlContainer)
+                .setName('Ngrok URL')
+                .addText(text => {
+                    text.inputEl.value = this.plugin.settings.ngrokUrl;
+                    text.inputEl.readOnly = true;
+                })
+                .addButton(button => {
+                    button
+                        .setButtonText('Copy')
+                        .onClick(() => {
+                            navigator.clipboard.writeText(this.plugin.settings.ngrokUrl);
+                            new Notice('URL copied to clipboard!');
+                        });
+                });
         }
+
+        new Setting(containerEl)
+            // ngrok start 
+            .addButton(button => {
+                button
+                    .setButtonText('Start Ngrok')
+                    .setClass('mod-cta')
+                    .onClick(async () => {
+                        await this.plugin.startNgrok();
+                        this.display();
+                    });
+            })
+            //ngrok stop
+            .addButton(button => {
+                button
+                    .setButtonText('Stop Ngrok')
+                    .setClass('mod-warning')
+                    .onClick(async () => {
+                        await this.plugin.stopNgrok();
+                        this.display();
+                    });
+            })
+            // server start
+            .addButton(button => {
+                button
+                    .setButtonText('Run server')
+                    .setClass('mod-cta')
+                    .onClick(async () => {
+                        await this.plugin.startServer();
+                        this.display();
+                    });
+            })
+            // server stop
+            .addButton(button => {
+                button
+                    .setButtonText('Stop server')
+                    .setClass('mod-warning')
+                    .onClick(async () => {
+                        await this.plugin.stopServer();
+                        this.display();
+                    });
+            });
     }
 }
-
+// File selection modal
 class FileSelectionModal extends Modal {
     files: TFile[];
     onChoose: (file: TFile) => void;
@@ -204,30 +224,24 @@ class FileSelectionModal extends Modal {
     }
 
     onOpen() {
-        console.log('Modal opened');
         const { contentEl } = this;
         contentEl.empty();
 
-        // 创建搜索输入框
         this.searchInput = contentEl.createEl('input', {
             type: 'text',
             placeholder: 'Search for files...'
         });
         this.searchInput.classList.add('search-input');
 
-        // 创建结果容器
         this.resultContainer = contentEl.createEl('div');
         this.resultContainer.classList.add('file-list-container');
 
-        // 添加搜索事件监听器
         this.searchInput.addEventListener('input', () => {
             this.updateFileList();
         });
 
-        // 初始显示所有文件
         this.updateFileList();
 
-        // 聚焦搜索框
         this.searchInput.focus();
     }
 
