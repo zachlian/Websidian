@@ -22,6 +22,10 @@ export default class WebsidianPlugin extends Plugin {
         //this.settings.ngrokUrl = '';
         await this.loadSettings();
         this.addSettingTab(new WebsidianSettingTab(this.app, this));
+        // close everything when the app is closed
+        this.app.workspace.on('quit', async () => {
+            await this.onunload();
+        });
     }
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -85,7 +89,6 @@ export default class WebsidianPlugin extends Plugin {
     // start ngrok
     async startNgrok() {
         try {
-            // 啟動 ngrok 隧道，指定本地端口
             const url = await ngrok.connect({
                 addr: 8080,
                 binPath: (defaultPath) => {
@@ -117,14 +120,9 @@ export default class WebsidianPlugin extends Plugin {
     }
     // on unload
     async onunload() {
-        await this.stopServer();
         await this.stopNgrok();
-        if (this.ngrokProcess) {
-            this.ngrokProcess.kill();
-        }
-        if (this.serverProcess) {
-            this.serverProcess.kill();
-        }
+        await this.stopServer();
+        await fetch(`http://localhost:8080/shutdown`);
     }
 }
 // Setting tab
