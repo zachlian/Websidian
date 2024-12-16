@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"html/template"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,35 +11,22 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/russross/blackfriday/v2"
 )
 
-var file_path = "C:\\Users\\45685\\桌面\\Desktop\\Obsidian\\todo.md"
-
-func renderMarkdownToHTML(mdContent []byte) template.HTML {
-	// Convert markdown to HTML using blackfriday
-	output := blackfriday.Run(mdContent)
-	return template.HTML(output)
-}
+var file_path = "C:\\Users\\45685\\桌面\\Desktop\\Obsidian\\demo2.html"
 
 func main() {
 	r := gin.Default()
 	r.Use(cors.Default())
-	// Load HTML templates
-	r.LoadHTMLGlob("templates/*")
 
-	// Route for displaying markdown as HTML
+	// 直接讀取 HTML 文件內容
 	r.GET("/", func(c *gin.Context) {
-		mdFile := file_path
-		mdContent, err := ioutil.ReadFile(mdFile)
-		if err != nil {
-			c.String(http.StatusInternalServerError, "Error reading file: %v", err)
-			return
-		}
-		htmlContent := renderMarkdownToHTML(mdContent)
-		c.HTML(http.StatusOK, "index.html", gin.H{
-			"content": htmlContent,
-		})
+		// htmlContent, err := ioutil.ReadFile(file_path)
+		// if err != nil {
+		// 	c.String(http.StatusInternalServerError, "Error reading file: "+err.Error())
+		// 	return
+		// }
+		c.File(file_path)
 	})
 
 	// 使用 http.Server 控制伺服器
