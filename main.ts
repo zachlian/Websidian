@@ -76,14 +76,6 @@ export default class WebsidianPlugin extends Plugin {
             try {
                 // 配置 HTML Export 設置
                 htmlExport.settings.exportPreset = "raw-documents";
-                // htmlExport.settings.deleteOldFiles = false;
-                // htmlExport.settings.onlyExportModified = false;
-                // htmlExport.settings.makeOfflineCompatible = true;
-                // htmlExport.settings.inlineAssets = false;
-                // htmlExport.settings.addTitle = true;
-                // htmlExport.settings.makeNamesWebStyle = true;
-                // htmlExport.settings.includeJS = true;
-                // htmlExport.settings.includeCSS = true;
     
                 // 執行導出
                 await htmlExport.html_expoter.export(
