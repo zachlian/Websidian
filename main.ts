@@ -1,39 +1,106 @@
-// main.ts
 import { App, Plugin, Notice, TFile, Modal, Setting, PluginSettingTab } from 'obsidian';
 import { exec } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as ngrok from 'ngrok';
-
+import { error } from 'console';
+declare module 'obsidian' {
+    interface App {
+        plugins: {
+            enabledPlugins: Set<string>;
+            plugins: {
+                [key: string]: any;
+            };
+        };
+    }
+}
 interface WebsidianSettings {
     ngrokUrl: string;
+    exportPath: string;
 }
 
 const DEFAULT_SETTINGS: WebsidianSettings = {
-    ngrokUrl: ''
+    ngrokUrl: '',
+    exportPath: ''
 };
 
 export default class WebsidianPlugin extends Plugin {
     settings: WebsidianSettings;
     serverProcess: any = null;
     ngrokProcess: any = null;
-    // triggered when the plugin is loaded
-    async onload() { 
-        //this.settings.ngrokUrl = '';
+
+    async onload() {
         await this.loadSettings();
         this.addSettingTab(new WebsidianSettingTab(this.app, this));
+
         // close everything when the app is closed
         this.app.workspace.on('quit', async () => {
             await this.onunload();
         });
     }
+
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     }
+
     async saveSettings() {
         await this.saveData(this.settings);
     }
-    // start server
+
+    // Get HTML Export plugin instance
+    getHtmlExportPlugin() {
+        const htmlExport = this.app.plugins.plugins["webpage-html-export"];
+        if (!htmlExport) {
+            new Notice("HTML Export plugin is not installed or enabled");
+            return null;
+        }
+        return htmlExport;
+    }
+
+     // Export file using HTML Export plugin
+     async exportFile(file: TFile): Promise<boolean> {
+        const htmlExport = this.getHtmlExportPlugin();
+        if (!htmlExport) return false;
+        
+        try {
+            new Notice('Starting export...');
+            
+            // 獲取完整的文件路徑
+            const fullPath = (this.app.vault.adapter as any).getFullPath(file.path);
+            const exportPath = path.dirname(fullPath);
+            this.settings.exportPath = exportPath;
+            await this.saveSettings();
+            
+            console.log(exportPath);
+
+            try {
+                // 配置 HTML Export 設置
+                htmlExport.settings.exportPreset = "raw-documents";
+    
+                // 執行導出
+                await htmlExport.html_expoter.export(
+                    true,
+                    [file],
+                    new htmlExport.Path(exportPath)
+                );
+                
+                new Notice('Export completed');
+                return true;
+    
+            } catch (error) {
+                console.error("Path error:", error);
+                new Notice("Invalid export path");
+                return false;
+            }
+        } catch (error) {
+            console.error("Export error:", error);
+            new Notice(`Failed to export file: ${error.message}`);
+            return false;
+        }
+    }
+
+
+    // Modified startServer to use exported HTML
     async startServer() {
         if (this.serverProcess) {
             new Notice('Server is already running.');
@@ -43,24 +110,45 @@ export default class WebsidianPlugin extends Plugin {
         const files = this.app.vault.getFiles();
         const modal = new FileSelectionModal(this.app, files, async (file: TFile) => {
             if (file) {
-                await this.runGoServer(file.path);
+                const success = await this.exportFile(file);
+                if (success) {
+                    // 等待一下確保文件已完全寫入
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    console.log("file.path", file.path);
+                    await this.runGoServer(file.path);
+                }
             }
         });
         modal.open();
     }
-    // run go server
+
+    // Run go server with the exported HTML
     async runGoServer(filePath: string) {
         const pluginPath = (this.app.vault.adapter as any).getFullPath(
-            '.obsidian/plugins/websidian'
+            '.obsidian/plugins/Websidian'
         );
         const mainGoPath = path.join(pluginPath, 'Web', 'main.go');
-        const vaultPath = (this.app.vault.adapter as any).getBasePath();
-        const absoluteFilePath = path.join(vaultPath, filePath);
+        
+        // 使用和導出時相同的路徑
+
+        const fullPath = (this.app.vault.adapter as any).getFullPath(filePath);
+        const exportPath = path.dirname(fullPath);
+        
+        // 獲取導出後的HTML文件名
+        const htmlFilename = path.basename(filePath, '.md') + '.html';
+        const exportedFilePath = path.join(exportPath, htmlFilename);
+
+        // 檢查導出的文件是否存在
+        if (!fs.existsSync(exportedFilePath)) {
+            new Notice(`Exported file not found: ${exportedFilePath}`);
+            console.log("file not found", exportedFilePath);
+            return;
+        }
 
         let content = fs.readFileSync(mainGoPath, 'utf8');
         content = content.replace(
             /var\s+file_path\s*=\s*"[^"]*"/,
-            `var file_path = "${absoluteFilePath.replace(/\\/g, '\\\\')}"`
+            `var file_path = "${exportedFilePath.replace(/\\/g, '\\\\')}"`
         );
         
         fs.writeFileSync(mainGoPath, content);
@@ -75,7 +163,8 @@ export default class WebsidianPlugin extends Plugin {
         });
         new Notice('Server started on port 8080');
     }
-    // close port
+
+    // Rest of the methods remain the same
     async stopServer() {
         await fetch(`http://localhost:8080/shutdown`);
 
@@ -86,7 +175,7 @@ export default class WebsidianPlugin extends Plugin {
 
         new Notice('Server shutting down');
     }
-    // start ngrok
+
     async startNgrok() {
         try {
             const url = await ngrok.connect({
@@ -105,7 +194,7 @@ export default class WebsidianPlugin extends Plugin {
         }
         new Notice('Ngrok tunnel started');
     }
-    // stop ngrok
+
     async stopNgrok() {
         await ngrok.disconnect();
         await ngrok.kill();
@@ -118,14 +207,15 @@ export default class WebsidianPlugin extends Plugin {
         }
         new Notice('Ngrok tunnel stopped');
     }
-    // on unload
+
     async onunload() {
         await this.stopNgrok();
         await this.stopServer();
         await fetch(`http://localhost:8080/shutdown`);
     }
 }
-// Setting tab
+
+// Modified settings tab to include export path
 class WebsidianSettingTab extends PluginSettingTab {
     plugin: WebsidianPlugin;
 
@@ -137,16 +227,37 @@ class WebsidianSettingTab extends PluginSettingTab {
     display(): void {
         const { containerEl } = this;
         containerEl.empty();
-
+    
         containerEl.createEl('h2', { text: 'Websidian Settings' });
-
-        const portInfo = new Setting(containerEl)
+    
+        // Export path setting
+        new Setting(containerEl)
+            .setName('Export Path')
+            .setDesc('Path where exported HTML files will be saved')
+            .addText(text => text
+                .setPlaceholder('Enter export path')
+                .setValue(this.plugin.settings.exportPath)
+                .onChange(async (value) => {
+                    // Validate and normalize path
+                    const normalizedPath = value.replace(/\\/g, '/');
+                    if (!normalizedPath.startsWith('/')) {
+                        // Make relative path absolute
+                        const vaultPath = (this.app.vault.adapter as any).getBasePath();
+                        this.plugin.settings.exportPath = path.join(vaultPath, normalizedPath);
+                    } else {
+                        this.plugin.settings.exportPath = normalizedPath;
+                    }
+                    await this.plugin.saveSettings();
+                }));
+    
+        // Port info
+        new Setting(containerEl)
             .setName('Server Port')
             .setDesc('8080');
-
+    
+        // Ngrok URL if available
         if (this.plugin.settings.ngrokUrl) {
             const urlContainer = containerEl.createEl('div', { cls: 'url-container' });
-            
             new Setting(urlContainer)
                 .setName('Ngrok URL')
                 .addText(text => {
@@ -162,9 +273,9 @@ class WebsidianSettingTab extends PluginSettingTab {
                         });
                 });
         }
-
+    
+        // Control buttons
         new Setting(containerEl)
-            // ngrok start 
             .addButton(button => {
                 button
                     .setButtonText('Start Ngrok')
@@ -174,7 +285,6 @@ class WebsidianSettingTab extends PluginSettingTab {
                         this.display();
                     });
             })
-            //ngrok stop
             .addButton(button => {
                 button
                     .setButtonText('Stop Ngrok')
@@ -184,7 +294,6 @@ class WebsidianSettingTab extends PluginSettingTab {
                         this.display();
                     });
             })
-            // server start
             .addButton(button => {
                 button
                     .setButtonText('Run server')
@@ -194,7 +303,6 @@ class WebsidianSettingTab extends PluginSettingTab {
                         this.display();
                     });
             })
-            // server stop
             .addButton(button => {
                 button
                     .setButtonText('Stop server')
@@ -206,7 +314,8 @@ class WebsidianSettingTab extends PluginSettingTab {
             });
     }
 }
-// File selection modal
+
+// File selection modal remains the same
 class FileSelectionModal extends Modal {
     files: TFile[];
     onChoose: (file: TFile) => void;
