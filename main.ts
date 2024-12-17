@@ -58,7 +58,7 @@ export default class WebsidianPlugin extends Plugin {
     }
 
      // Export file using HTML Export plugin
-     async exportFile(file: TFile): Promise<boolean> {
+     async exportFile(file: TFile, exportPath: string): Promise<boolean> {
         const htmlExport = this.getHtmlExportPlugin();
         if (!htmlExport) return false;
         
@@ -66,9 +66,12 @@ export default class WebsidianPlugin extends Plugin {
             new Notice('Starting export...');
             
             // 獲取完整的文件路徑
-            const fullPath = (this.app.vault.adapter as any).getFullPath(file.path);
-            const exportPath = path.dirname(fullPath);
+            // const fullPath = (this.app.vault.adapter as any).getFullPath(file.path);
+            // console.log("new_exportPath", exportPath);
+            // exportPath = path.dirname(fullPath);
+            // console.log("old_exportPath", exportPath);
             this.settings.exportPath = exportPath;
+            
             await this.saveSettings();
             
             console.log(exportPath);
@@ -99,6 +102,26 @@ export default class WebsidianPlugin extends Plugin {
         }
     }
 
+    async cleanupExportPath(directoryPath: string) {
+        try {
+            const files = await fs.promises.readdir(directoryPath);
+            for (const file of files) {
+                const filePath = path.join(directoryPath, file);
+                const stat = await fs.promises.stat(filePath);
+    
+                if (stat.isDirectory()) {
+                    await this.cleanupExportPath(filePath);
+                    await fs.promises.rmdir(filePath);
+                } else {
+                    await fs.promises.unlink(filePath);
+                }
+            }
+            console.log(`Directory ${directoryPath} has been cleared.`);
+        } catch (error) {
+            console.error(`Error clearing directory ${directoryPath}:`, error);
+            new Notice(`Failed to clear directory: ${error.message}`);
+        }
+    }
 
     // Modified startServer to use exported HTML
     async startServer() {
@@ -106,16 +129,21 @@ export default class WebsidianPlugin extends Plugin {
             new Notice('Server is already running.');
             return;
         }
-
+        const pluginPath = (this.app.vault.adapter as any).getFullPath('.obsidian/plugins/Websidian');
+        const outputPath = path.join(pluginPath, 'Web', 'html');
         const files = this.app.vault.getFiles();
         const modal = new FileSelectionModal(this.app, files, async (file: TFile) => {
             if (file) {
-                const success = await this.exportFile(file);
+                this.cleanupExportPath(outputPath);
+                const success = await this.exportFile(file, outputPath);
+                const htmlFilename = path.basename(file.path, '.md') + '.html';
+                const htmlPath = path.join(outputPath, htmlFilename);
+                console.log("htmlPath", htmlPath);
                 if (success) {
                     // 等待一下確保文件已完全寫入
                     await new Promise(resolve => setTimeout(resolve, 3000));
                     console.log("file.path", file.path);
-                    await this.runGoServer(file.path);
+                    await this.runGoServer(htmlPath, pluginPath);
                 }
             }
         });
@@ -123,28 +151,14 @@ export default class WebsidianPlugin extends Plugin {
     }
 
     // Run go server with the exported HTML
-    async runGoServer(filePath: string) {
-        const pluginPath = (this.app.vault.adapter as any).getFullPath(
-            '.obsidian/plugins/Websidian'
-        );
-        const mainGoPath = path.join(pluginPath, 'Web', 'main.go');
-        
-        // 使用和導出時相同的路徑
-
-        const fullPath = (this.app.vault.adapter as any).getFullPath(filePath);
-        const exportPath = path.dirname(fullPath);
-        
-        // 獲取導出後的HTML文件名
-        const htmlFilename = path.basename(filePath, '.md') + '.html';
-        const exportedFilePath = path.join(exportPath, htmlFilename);
-
+    async runGoServer(exportedFilePath: string, pluginPath: string) {
         // 檢查導出的文件是否存在
         if (!fs.existsSync(exportedFilePath)) {
             new Notice(`Exported file not found: ${exportedFilePath}`);
             console.log("file not found", exportedFilePath);
             return;
         }
-
+        const mainGoPath = path.join(pluginPath, 'Web', 'main.go');
         let content = fs.readFileSync(mainGoPath, 'utf8');
         content = content.replace(
             /var\s+file_path\s*=\s*"[^"]*"/,
