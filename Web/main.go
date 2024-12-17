@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var file_path = "C:\\Users\\45685\\桌面\\Desktop\\Obsidian\\.obsidian\\plugins\\Websidian\\Web\\html\\demo1.html"
+var file_path = "C:\\Users\\45685\\桌面\\Desktop\\Obsidian\\.obsidian\\plugins\\Websidian\\Web\\html\\demo2.html"
 
 func main() {
 	r := gin.Default()

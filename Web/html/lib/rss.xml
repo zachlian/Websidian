@@ -1,43 +1,25 @@
-<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0"><channel><title><![CDATA[Obsidian Vault]]></title><description><![CDATA[Obsidian digital garden]]></description><link>http://github.com/dylang/node-rss</link><image><url>lib\media\favicon.png</url><title>Obsidian Vault</title><link></link></image><generator>Webpage HTML Export plugin for Obsidian</generator><lastBuildDate>Tue, 17 Dec 2024 06:43:00 GMT</lastBuildDate><atom:link href="lib\rss.xml" rel="self" type="application/rss+xml"/><pubDate>Tue, 17 Dec 2024 06:43:00 GMT</pubDate><ttl>60</ttl><dc:creator></dc:creator><item><title><![CDATA[import]]></title><description><![CDATA[ 
- <br><br>from torch.utils.data import Dataset, DataLoader<br>
-<br><br><br>An abstract class -- a collection of data, <br>
-<br>__init__()<br>
-通常需要override，定義一些參數，如路徑，資料數
-<br>class txt_dataset(Dataset): #繼承torch的Dataset
-	def __init__(self, data_dir, label_dir, file_num):
-		self.data_dir = ./asdfas
-		self.label_dir = ./fjdidf
-		self.file_num = 412
-<br>
-<br>__getitem__()<br>
-需要override，定義怎麼取得dataset裡面的items，通常透過np來讀
-<br>	def __getitem__(self, index):
-		data_name= os.path.join(self.data_dir,'data_'+                                      str(index) + '.txt')
-		label_name= os.path.join(self.lable_dir,'label_'+                                    str(index) + '.txt')
-		# os.path.join 可以操作出一個路徑的string
-		# /path/label_5.txt
-		D = np.loadtxt(data_name)
-		L = np.loadtxt(label_name)
-		# 讀這個檔名的資料
-		return D, L
-<br>
-<br>__len__()<br>
-定義dataset中samples的數量
-<br>	def __len__(self):
-		return self.file_num
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0"><channel><title><![CDATA[Obsidian Vault]]></title><description><![CDATA[Obsidian digital garden]]></description><link>http://github.com/dylang/node-rss</link><image><url>lib\media\favicon.png</url><title>Obsidian Vault</title><link></link></image><generator>Webpage HTML Export plugin for Obsidian</generator><lastBuildDate>Tue, 17 Dec 2024 06:46:36 GMT</lastBuildDate><atom:link href="lib\rss.xml" rel="self" type="application/rss+xml"/><pubDate>Tue, 17 Dec 2024 06:46:36 GMT</pubDate><ttl>60</ttl><dc:creator></dc:creator><item><title><![CDATA[MARKDOWN 範例模板 🧠]]></title><description><![CDATA[ 
+ <br><br><br><br>
+<br>程式設計: ⭐⭐⭐⭐
+<br>專案管理: ⭐⭐⭐
+<br>溝通能力: ⭐⭐⭐⭐⭐
 <br><br>
-# DataLoader
-方便操作dataset裡面的資料，type為tensor<br>
-<br>Establish
-<br>	trainloader = DataLoader(train_dataset,
-							 shuffle = True,                                             batch_size = 3)
-<br>
-<br>shuffle: 每次train的sample順序會變，test data不shuffle
-<br>batch_size: 批次大小，更新參數時一次性處理的sample數量
-<br>Use
-<br>for data, label in testloader:
-	print('Data: ', data)
-	print('Label', label)
-for i, (data, label) in enumerate(testloader):
-	pass
-]]></description><link>demo1.html</link><guid isPermaLink="false">demo1.md</guid><pubDate>Mon, 16 Dec 2024 15:05:52 GMT</pubDate></item></channel></rss>
+<br>完成一個開源專案
+<br>學習新的程式語言
+<br><br><br>
+<br>基礎語法
+<br>並發編程
+<br>Web 開發
+<br>微服務架構
+<br><br>
+Goroutines 是 Go 語言中輕量級線程，可以高效地實現並發編程。
+<br><br>
+<br>《Go 語言程式設計》
+<br>《乾淨的程式碼》
+<br>《系統設計面試指南》
+<br><br><br>
+<br>今天最大的成就是什麼？
+<br>今天學到了什麼新知識？
+<br>明天我想改進的地方是？
+<br><br>靈感就像是野生的貓咪，來去自如，需要耐心和敏銳的觀察。
+]]></description><link>demo2.html</link><guid isPermaLink="false">demo2.md</guid><pubDate>Tue, 17 Dec 2024 05:02:31 GMT</pubDate></item></channel></rss>
