@@ -6,9 +6,3 @@ Websidian is an Obsidian plugin designed to solve note-sharing challenges by tra
 	- using plugin: https://github.com/KosmosisDire/obsidian-webpage-export
 - Local web server deployment
 - Public sharing via Ngrok
-- Preservation of original Obsidian note styling
-
-## Prerequisites
-- Obsidian
-- Go
-- Ngrok
